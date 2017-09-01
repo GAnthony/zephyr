@@ -22,4 +22,8 @@
 #define LED0_GPIO_PIN   3  /*GPIO11/Pin2 */
 #define LED0_GPIO_PORT  "GPIO_A1"
 
+/* Device Addresses on I2C addresses */
+#define I2C0_TMP_ADDR      (0x41)      /* TMP006 I2C Address */
+#define I2C0_TMP_REGISTER  (0x0001)    /* TMP006 Result Register */
+
 #endif /* __INC_BOARD_H */
