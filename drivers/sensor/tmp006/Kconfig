@@ -1,0 +1,39 @@
+# Kconfig - TMP006 temperature sensor configuration options
+
+#
+# Copyright (c) 2017 Texas Instruments Incorporated
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+menuconfig TMP006
+	bool
+	prompt "TMP006 Temperature Sensor"
+	depends on SENSOR && I2C
+	default n
+	help
+	Enable driver for TMP006 infrared thermopile sensors.
+
+config TMP006_NAME
+	string
+	prompt "Driver name"
+	default "TEMP_0"
+	depends on TMP006
+	help
+	Device name with which the TMP006 sensor is identified.
+
+config TMP006_I2C_ADDR
+	hex "I2C address for TMP006"
+	depends on TMP006
+	default 0x41
+	help
+	I2C address of the TMP006 sensor.
+
+config TMP006_I2C_MASTER_DEV_NAME
+	string
+	prompt "I2C master where TMP006 is connected"
+	depends on TMP006
+	default "I2C_0"
+	help
+	Specify the device name of the I2C master device to which the
+	TMP006 chip is connected.
