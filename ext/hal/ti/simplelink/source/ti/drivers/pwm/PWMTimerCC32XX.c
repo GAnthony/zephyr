@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2017, Texas Instruments Incorporated
+ * Copyright (c) 2015-2018, Texas Instruments Incorporated
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -174,7 +174,7 @@ static uint32_t getDutyCounts(PWM_Duty_Units dutyUnits, uint32_t dutyValue,
             break;
 
         case PWM_DUTY_US:
-            duty = dutyValue * (freq.lo/1000000);
+            duty = (dutyValue != 0) ? (dutyValue * (freq.lo/1000000)) - 1 : 0;
             break;
 
         default:
@@ -203,12 +203,12 @@ static uint32_t getPeriodCounts(PWM_Period_Units periodUnits,
 
         case PWM_PERIOD_HZ:
             if (periodValue && periodValue <= freq.lo) {
-                period = freq.lo / periodValue;
+                period = (freq.lo / periodValue) - 1;
             }
             break;
 
         case PWM_PERIOD_US:
-            period = periodValue * (freq.lo/1000000);
+            period = (periodValue * (freq.lo/1000000)) - 1;
             break;
 
         default:

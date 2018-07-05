@@ -36,7 +36,7 @@
 /******************************************************************************
 *   cc_pal.h
 *
-*   SimpleLink Wi-Fi abstraction file for CC3220
+*   SimpleLink Wi-Fi abstraction file for CC32xx
 ******************************************************************************/
 
 #ifndef __CC31xx_PAL_H__
@@ -50,11 +50,33 @@ extern "C" {
 #include <ti/drivers/dpl/MutexP.h>
 #include <ti/drivers/dpl/ClockP.h>
 
+#if defined(SL_PLATFORM_MULTI_THREADED)
+#if defined(__TI_COMPILER_VERSION__)
+#include <posix/pthread.h>
+#elif defined(__IAR_SYSTEMS_ICC__)
+#include <posix/pthread.h>
+#elif defined(__GNUC__)
+#include <posix/pthread.h>
+#else
+#error "Unknown compiler, use __TI_COMPILER_VERSION__ __IAR_SYSTEMS_ICC__ or __GNUC__"
+#endif
+#endif
+
+
+
+
+
 
 #define MAX_QUEUE_SIZE					(4)
 #define OS_WAIT_FOREVER   				(0xFFFFFFFF)
 #define OS_NO_WAIT        				(0)
 #define OS_OK 	 						(0)
+
+#define Semaphore_OK                    (0)
+#define Semaphore_FAILURE               (-1)
+
+#define Mutex_OK                        (0)
+#define Mutex_FAILURE                   (-1)
 
 
 /*!
@@ -287,7 +309,7 @@ int SemaphoreP_delete_handle(SemaphoreP_Handle* pSemHandle);
 */
 int SemaphoreP_post_handle(SemaphoreP_Handle* pSemHandle);
 
-
+#if defined(SL_PLATFORM_MULTI_THREADED)
 /*!
     \brief Creates a mutex object handle, using the driver porting layer of the core SDK. 
 
@@ -297,6 +319,55 @@ int SemaphoreP_post_handle(SemaphoreP_Handle* pSemHandle);
 					Otherwise, -1 shall be returned
 
 	\note           belongs to \ref ported_sec	
+*/
+int Mutex_create_handle(pthread_mutex_t* pMutexHandle);
+
+
+/*!
+    \brief Deletes a mutex object handle, using the driver porting layer of the core SDK.
+
+    \param          pMutexHandle    -   pointer to a memory structure that would contain the handle.
+
+    \return         the function shall return 0.
+
+    \note           belongs to \ref ported_sec
+*/
+int  MutexP_delete_handle(pthread_mutex_t* pMutexHandle);
+
+/*!
+    \brief Unlocks a mutex object.
+
+	\param	 		pMutexHandle    -	pointer to a memory structure that contains the object.
+
+	\return			upon successful unlocking, the function shall return 0.
+
+	\note           belongs to \ref ported_sec	
+*/
+int Mutex_unlock(pthread_mutex_t *pMutexHandle);
+
+
+/*!
+    \brief Locks a mutex object.
+
+	\param	 		pMutexHandle    -	pointer to a memory structure that contains the object.
+
+	\return			upon successful locking, the function shall return 0.
+
+	\note           belongs to \ref ported_sec	
+	
+	\warning        The lock will block until the mutex is available.
+*/
+int Mutex_lock(pthread_mutex_t *pMutexHandle);
+#else
+/*!
+    \brief Creates a mutex object handle, using the driver porting layer of the core SDK.
+
+    \param          pMutexHandle    -   pointer to a memory structure that would contain the handle.
+
+    \return         upon successful creation, the function shall return 0.
+                    Otherwise, -1 shall be returned
+
+    \note           belongs to \ref ported_sec
 */
 int Mutex_create_handle(MutexP_Handle* pMutexHandle);
 
@@ -315,11 +386,11 @@ int  MutexP_delete_handle(MutexP_Handle* pMutexHandle);
 /*!
     \brief Unlocks a mutex object.
 
-	\param	 		pMutexHandle    -	pointer to a memory structure that contains the object.
+    \param          pMutexHandle    -   pointer to a memory structure that contains the object.
 
-	\return			upon successful unlocking, the function shall return 0.
+    \return         upon successful unlocking, the function shall return 0.
 
-	\note           belongs to \ref ported_sec	
+    \note           belongs to \ref ported_sec
 */
 int Mutex_unlock(MutexP_Handle pMutexHandle);
 
@@ -327,16 +398,16 @@ int Mutex_unlock(MutexP_Handle pMutexHandle);
 /*!
     \brief Locks a mutex object.
 
-	\param	 		pMutexHandle    -	pointer to a memory structure that contains the object.
+    \param          pMutexHandle    -   pointer to a memory structure that contains the object.
 
-	\return			upon successful locking, the function shall return 0.
+    \return         upon successful locking, the function shall return 0.
 
-	\note           belongs to \ref ported_sec	
-	
-	\warning        The lock will block until the mutex is available.
+    \note           belongs to \ref ported_sec
+
+    \warning        The lock will block until the mutex is available.
 */
 int Mutex_lock(MutexP_Handle pMutexHandle);
-
+#endif
 
 /*!
     \brief Take a time stamp value.

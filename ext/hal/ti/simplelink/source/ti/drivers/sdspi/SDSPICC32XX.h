@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2017, Texas Instruments Incorporated
+ * Copyright (c) 2015-2018, Texas Instruments Incorporated
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -209,17 +209,17 @@ typedef enum SDSPICC32XX_CardType {
  *  @endcode
  */
 typedef struct SDSPICC32XX_HWAttrsV1 {
-    /*!< SPI Peripheral base address */
+    /*! SPI Peripheral base address */
     uint32_t baseAddr;
     /*! SPI PRCM peripheral number */
     uint32_t spiPRCM;
-    /*!< GSPI CLK pin assignment */
+    /*! GSPI CLK pin assignment */
     uint32_t clkPin;
-    /*!< GSPI MOSI pin assignment & GPIO encoding when using MOSI as GPIO */
+    /*! GSPI MOSI pin assignment & GPIO encoding when using MOSI as GPIO */
     uint32_t mosiPin;
-    /*!< GSPI MISO pin assignment */
+    /*! GSPI MISO pin assignment */
     uint32_t misoPin;
-    /*!< CS pin assignment & GPIO encoding for pin use as GPIO */
+    /*! CS pin assignment & GPIO encoding for pin use as GPIO */
     uint32_t csPin;
 } SDSPICC32XX_HWAttrsV1;
 

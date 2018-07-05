@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017, Texas Instruments Incorporated
+ * Copyright (c) 2017-2018, Texas Instruments Incorporated
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -80,13 +80,11 @@ static int_fast16_t doWriteVerify(NVS_Handle handle, size_t offset,
 
 static int_fast16_t extFlashSpiWrite(const uint8_t *buf, size_t len);
 static int_fast16_t extFlashSpiRead(uint8_t *buf, size_t len);
-static int_fast16_t extFlashPowerDown(void);
-static int_fast16_t extFlashPowerStandby(void);
-static int_fast16_t extFlashWaitReady(void);
-static int_fast16_t extFlashWriteEnable(void);
-static int_fast16_t extFlashMassErase(void);
-static void extFlashSelect(void);
-static void extFlashDeselect(void);
+static int_fast16_t extFlashPowerDown(NVS_Handle nvsHandle);
+static int_fast16_t extFlashPowerStandby(NVS_Handle nvsHandle);
+static int_fast16_t extFlashWaitReady(NVS_Handle nvsHandle);
+static int_fast16_t extFlashWriteEnable(NVS_Handle nvsHandle);
+static int_fast16_t extFlashMassErase(NVS_Handle nvsHandle);
 
 extern NVS_Config NVS_config[];
 extern const uint8_t NVS_count;
@@ -111,7 +109,7 @@ static uint8_t spiHandleUsers[MAX_SPI_INDEX + 1];
 
 /*
  * currently active (protected within Semaphore_pend() block)
- * SPI handle and CSN pin
+ * SPI handle, and CSN pin
  */
 static SPI_Handle spiHandle;
 static uint32_t spiCsnGpioIndex;
@@ -144,12 +142,14 @@ void NVSSPI25X_close(NVS_Handle handle)
         /* close SPI if this is the last region that uses it */
         if (spiHandleUsers[hwAttrs->spiIndex] == 0) {
             // Put the part in low power mode
-            extFlashPowerDown();
+            extFlashPowerDown(handle);
 
             SPI_close(object->spiHandle);
             spiHandles[hwAttrs->spiIndex] = NULL;
         }
     }
+
+    NVSSPI25X_deinitSpiCs(handle, spiCsnGpioIndex);
 
     object->opened = false;
 
@@ -173,7 +173,7 @@ int_fast16_t NVSSPI25X_control(NVS_Handle handle, uint_fast16_t cmd, uintptr_t a
     spiHandle = object->spiHandle;
     spiCsnGpioIndex = hwAttrs->spiCsnGpioIndex;
 
-    return (extFlashMassErase());
+    return (extFlashMassErase(handle));
 }
 
 /*
@@ -215,7 +215,6 @@ void NVSSPI25X_init()
     unsigned int key;
     SemaphoreP_Handle sem;
 
-    GPIO_init();
     SPI_init();
 
     /* speculatively create a binary semaphore for thread safety */
@@ -233,7 +232,9 @@ void NVSSPI25X_init()
         /* init already called */
         HwiP_restore(key);
         /* delete unused Semaphore */
-        if (sem) SemaphoreP_delete(sem);
+        if (sem) {
+            SemaphoreP_delete(sem);
+        }
     }
 }
 
@@ -242,17 +243,10 @@ void NVSSPI25X_init()
  */
 int_fast16_t NVSSPI25X_lock(NVS_Handle handle, uint32_t timeout)
 {
-    switch (SemaphoreP_pend(writeSem, timeout)) {
-        case SemaphoreP_OK:
-            return (NVS_STATUS_SUCCESS);
-
-        case SemaphoreP_TIMEOUT:
-            return (NVS_STATUS_TIMEOUT);
-
-        case SemaphoreP_FAILURE:
-        default:
-            return (NVS_STATUS_ERROR);
+    if (SemaphoreP_pend(writeSem, timeout) != SemaphoreP_OK) {
+        return (NVS_STATUS_TIMEOUT);
     }
+    return (NVS_STATUS_SUCCESS);
 }
 
 /*
@@ -348,17 +342,14 @@ NVS_Handle NVSSPI25X_open(uint_least8_t index, NVS_Params *params)
     spiHandle = object->spiHandle;
     spiCsnGpioIndex = hwAttrs->spiCsnGpioIndex;
 
-    /*
-     * Make SPI Chip Select GPIO an output, and set it high.
-     * Since the same device may be used for multiple regions, configuring
-     * the same Chip Select pin may be done multiple times. No harm done.
-     */
-    GPIO_setConfig(hwAttrs->spiCsnGpioIndex, GPIO_CFG_OUT_STD | GPIO_CFG_OUT_HIGH);
+
+    /* initialize chip select output */
+    NVSSPI25X_initSpiCs(handle, spiCsnGpioIndex);
 
     object->opened = true;
 
     /* Put the part in standby mode */
-    extFlashPowerStandby();
+    extFlashPowerStandby(handle);
 
     SemaphoreP_post(writeSem);
 
@@ -372,8 +363,6 @@ int_fast16_t NVSSPI25X_read(NVS_Handle handle, size_t offset, void *buffer,
         size_t bufferSize)
 {
     NVSSPI25X_HWAttrs const *hwAttrs;
-    size_t xferSize;
-    uint8_t *dstBuf;
     int retval = NVS_STATUS_SUCCESS;
 
     hwAttrs = handle->hwAttrs;
@@ -383,36 +372,13 @@ int_fast16_t NVSSPI25X_read(NVS_Handle handle, size_t offset, void *buffer,
         return (NVS_STATUS_INV_OFFSET);
     }
 
-    dstBuf = buffer;
-
     /*
      *  Get exclusive access to the region.  We don't want someone
      *  else to erase the region while we are reading it.
      */
     SemaphoreP_pend(writeSem, SemaphoreP_WAIT_FOREVER);
 
-    /*
-     * break read down into 1024 byte pieces to workaround TIDRIVERS-1173
-     */
-    while (bufferSize) {
-        if (bufferSize <= 1024) {
-            xferSize = bufferSize;
-        }
-        else {
-            xferSize = 1024;
-        }
-
-        retval = doRead(handle, offset, dstBuf, xferSize);
-
-        if (retval != NVS_STATUS_SUCCESS) {
-            break;
-        }
-        else {
-            offset += xferSize;
-            dstBuf += xferSize;
-            bufferSize -= xferSize;
-        }
-    }
+    retval = doRead(handle, offset, buffer, bufferSize);
 
     SemaphoreP_post(writeSem);
 
@@ -458,8 +424,12 @@ int_fast16_t NVSSPI25X_write(NVS_Handle handle, size_t offset, void *buffer,
 
     /* If erase is set, erase destination sector(s) first */
     if (flags & NVS_WRITE_ERASE) {
-        retval = doErase(handle, offset & object->sectorBaseMask,
-                     (bufferSize + hwAttrs->sectorSize) & object->sectorBaseMask);
+        length = bufferSize & object->sectorBaseMask;
+        if (bufferSize & (~object->sectorBaseMask)) {
+            length += hwAttrs->sectorSize;
+        }
+
+        retval = doErase(handle, offset & object->sectorBaseMask, length);
         if (retval != NVS_STATUS_SUCCESS) {
             SemaphoreP_post(writeSem);
             return (retval);
@@ -489,14 +459,14 @@ int_fast16_t NVSSPI25X_write(NVS_Handle handle, size_t offset, void *buffer,
         size_t ilen; /* interim length per instruction */
 
         /* Wait till previous erase/program operation completes */
-        int ret = extFlashWaitReady();
+        int ret = extFlashWaitReady(handle);
 
         if (ret) {
             status = false;
             break;
         }
 
-        ret = extFlashWriteEnable();
+        ret = extFlashWriteEnable(handle);
 
         if (ret) {
             status = false;
@@ -523,7 +493,7 @@ int_fast16_t NVSSPI25X_write(NVS_Handle handle, size_t offset, void *buffer,
          * should be enough to delay
          * as much.
          */
-        extFlashSelect();
+        NVSSPI25X_assertSpiCs(handle, spiCsnGpioIndex);
 
         if (extFlashSpiWrite(wbuf, sizeof(wbuf)) != NVS_STATUS_SUCCESS) {
             status = false;
@@ -536,7 +506,7 @@ int_fast16_t NVSSPI25X_write(NVS_Handle handle, size_t offset, void *buffer,
         }
 
         srcBuf += ilen;
-        extFlashDeselect();
+        NVSSPI25X_deassertSpiCs(handle, spiCsnGpioIndex);
     }
 
     if (status == false) {
@@ -661,12 +631,12 @@ static int_fast16_t doErase(NVS_Handle handle, size_t offset, size_t size)
 
     while (size) {
         /* Wait till previous erase/program operation completes */
-        int ret = extFlashWaitReady();
+        int ret = extFlashWaitReady(handle);
         if (ret) {
             return (NVS_STATUS_ERROR);
         }
 
-        ret = extFlashWriteEnable();
+        ret = extFlashWriteEnable(handle);
         if (ret) {
             return (NVS_STATUS_ERROR);
         }
@@ -675,14 +645,14 @@ static int_fast16_t doErase(NVS_Handle handle, size_t offset, size_t size)
         wbuf[2] = (sectorBase >> 8) & 0xff;
         wbuf[3] = sectorBase & 0xff;
 
-        extFlashSelect();
+        NVSSPI25X_assertSpiCs(handle, spiCsnGpioIndex);
 
         if (extFlashSpiWrite(wbuf, sizeof(wbuf))) {
             /* failure */
-            extFlashDeselect();
+            NVSSPI25X_deassertSpiCs(handle, spiCsnGpioIndex);
             return (NVS_STATUS_ERROR);
         }
-        extFlashDeselect();
+        NVSSPI25X_deassertSpiCs(handle, spiCsnGpioIndex);
 
         sectorBase += sectorSize;
         size -= sectorSize;
@@ -713,7 +683,7 @@ static int_fast16_t doRead(NVS_Handle handle, size_t offset, void *buffer,
     loffset = offset + hwAttrs->regionBaseOffset;
 
     /* Wait till previous erase/program operation completes */
-    retval = extFlashWaitReady();
+    retval = extFlashWaitReady(handle);
     if (retval) {
         return (retval);
     }
@@ -728,52 +698,34 @@ static int_fast16_t doRead(NVS_Handle handle, size_t offset, void *buffer,
     wbuf[2] = (loffset >> 8) & 0xff;
     wbuf[3] = loffset & 0xff;
 
-    extFlashSelect();
+    NVSSPI25X_assertSpiCs(handle, spiCsnGpioIndex);
 
     if (extFlashSpiWrite(wbuf, sizeof(wbuf))) {
         /* failure */
-        extFlashDeselect();
+        NVSSPI25X_deassertSpiCs(handle, spiCsnGpioIndex);
         return (NVS_STATUS_ERROR);
     }
 
     retval = extFlashSpiRead(buffer, bufferSize);
 
-    extFlashDeselect();
+    NVSSPI25X_deassertSpiCs(handle, spiCsnGpioIndex);
 
     return (retval);
-}
-
-/*
- *  ======== extFlashSelect =======
- *  Assert SPI flash /CS
- */
-static void extFlashSelect(void)
-{
-    GPIO_write(spiCsnGpioIndex, 0);
-}
-
-/*
- *  ======== extFlashDeselect =======
- *  De-assert SPI flash /CS
- */
-static void extFlashDeselect(void)
-{
-    GPIO_write(spiCsnGpioIndex, 1);
 }
 
 /*
  *  ======== extFlashPowerDown =======
  *  Issue power down command
  */
-static int_fast16_t extFlashPowerDown(void)
+static int_fast16_t extFlashPowerDown(NVS_Handle nvsHandle)
 {
     uint8_t cmd;
     int_fast16_t status;
 
     cmd = SPIFLASH_DP;
-    extFlashSelect();
+    NVSSPI25X_assertSpiCs(nvsHandle, spiCsnGpioIndex);
     status = extFlashSpiWrite(&cmd,sizeof(cmd));
-    extFlashDeselect();
+    NVSSPI25X_deassertSpiCs(nvsHandle, spiCsnGpioIndex);
 
     return (status);
 }
@@ -782,18 +734,18 @@ static int_fast16_t extFlashPowerDown(void)
  *  ======== extFlashPowerStandby =======
  *  Issue standby command
  */
-static int_fast16_t extFlashPowerStandby(void)
+static int_fast16_t extFlashPowerStandby(NVS_Handle nvsHandle)
 {
     uint8_t cmd;
     int_fast16_t status;
 
     cmd = SPIFLASH_RDP;
-    extFlashSelect();
+    NVSSPI25X_assertSpiCs(nvsHandle, spiCsnGpioIndex);
     status = extFlashSpiWrite(&cmd, sizeof(cmd));
-    extFlashDeselect();
+    NVSSPI25X_deassertSpiCs(nvsHandle, spiCsnGpioIndex);
 
     if (status == NVS_STATUS_SUCCESS) {
-        status = extFlashWaitReady();
+        status = extFlashWaitReady(nvsHandle);
     }
 
     return (status);
@@ -803,44 +755,44 @@ static int_fast16_t extFlashPowerStandby(void)
  *  ======== extFlashMassErase =======
  *  Issue mass erase command
  */
-static int_fast16_t extFlashMassErase(void)
+static int_fast16_t extFlashMassErase(NVS_Handle nvsHandle)
 {
     uint8_t cmd;
     int_fast16_t status;
 
     /* wait for previous operation to complete */
-    if (extFlashWaitReady()) {
+    if (extFlashWaitReady(nvsHandle)) {
         return (NVS_STATUS_ERROR);
     }
 
     cmd = SPIFLASH_MASS_ERASE;
-    extFlashSelect();
+    NVSSPI25X_assertSpiCs(nvsHandle, spiCsnGpioIndex);
     status = extFlashSpiWrite(&cmd,sizeof(cmd));
-    extFlashDeselect();
+    NVSSPI25X_deassertSpiCs(nvsHandle, spiCsnGpioIndex);
 
     if (status != NVS_STATUS_SUCCESS) {
         return (status);
     }
 
     /* wait for mass erase to complete */
-    return (extFlashWaitReady());
+    return (extFlashWaitReady(nvsHandle));
 }
 
 /*
  *  ======== extFlashWaitReady =======
  *  Wait for any previous job to complete.
  */
-static int_fast16_t extFlashWaitReady(void)
+static int_fast16_t extFlashWaitReady(NVS_Handle nvsHandle)
 {
     const uint8_t wbuf[1] = { SPIFLASH_READ_STATUS };
     int_fast16_t ret;
     uint8_t buf;
 
     for (;;) {
-        extFlashSelect();
+        NVSSPI25X_assertSpiCs(nvsHandle, spiCsnGpioIndex);
         extFlashSpiWrite(wbuf, sizeof(wbuf));
         ret = extFlashSpiRead(&buf,sizeof(buf));
-        extFlashDeselect();
+        NVSSPI25X_deassertSpiCs(nvsHandle, spiCsnGpioIndex);
 
         if (ret != NVS_STATUS_SUCCESS) {
             /* Error */
@@ -859,14 +811,14 @@ static int_fast16_t extFlashWaitReady(void)
  *  ======== extFlashWriteEnable =======
  *  Issue SPIFLASH_WRITE_ENABLE command
  */
-static int_fast16_t extFlashWriteEnable(void)
+static int_fast16_t extFlashWriteEnable(NVS_Handle nvsHandle)
 {
     const uint8_t wbuf[] = { SPIFLASH_WRITE_ENABLE };
     int_fast16_t ret;
 
-    extFlashSelect();
+    NVSSPI25X_assertSpiCs(nvsHandle, spiCsnGpioIndex);
     ret = extFlashSpiWrite(wbuf,sizeof(wbuf));
-    extFlashDeselect();
+    NVSSPI25X_deassertSpiCs(nvsHandle, spiCsnGpioIndex);
 
     return (ret);
 }
@@ -878,10 +830,28 @@ static int_fast16_t extFlashSpiWrite(const uint8_t *buf, size_t len)
 {
     SPI_Transaction masterTransaction;
 
+    masterTransaction.rxBuf  = NULL;
+
+    /*
+     * work around SPI transfer from address 0x0
+     * transfer first byte from local buffer
+     */
+    if (buf == NULL) {
+        uint8_t byte0;
+        byte0 = *buf++;
+        masterTransaction.count  = 1;
+        masterTransaction.txBuf  = (void*)&byte0;
+        if (!SPI_transfer(spiHandle, &masterTransaction)) {
+            return (NVS_STATUS_ERROR);
+        }
+        len = len - 1;
+        if (len == 0) {
+            return (NVS_STATUS_SUCCESS);
+        }
+    }
+
     masterTransaction.count  = len;
     masterTransaction.txBuf  = (void*)buf;
-    masterTransaction.arg    = NULL;
-    masterTransaction.rxBuf  = NULL;
 
     return (SPI_transfer(spiHandle, &masterTransaction) ? NVS_STATUS_SUCCESS : NVS_STATUS_ERROR);
 }
@@ -894,10 +864,110 @@ static int_fast16_t extFlashSpiRead(uint8_t *buf, size_t len)
 {
     SPI_Transaction masterTransaction;
 
-    masterTransaction.count = len;
     masterTransaction.txBuf = NULL;
-    masterTransaction.arg = NULL;
+
+    /*
+     * work around SPI transfer to address 0x0
+     * transfer first byte into local buffer
+     */
+    if (buf == NULL) {
+        uint8_t byte0;
+        masterTransaction.count  = 1;
+        masterTransaction.rxBuf  = (void*)&byte0;
+        if (!SPI_transfer(spiHandle, &masterTransaction)) {
+            return (NVS_STATUS_ERROR);
+        }
+        *buf++ = byte0;
+        len = len - 1;
+        if (len == 0) {
+            return (NVS_STATUS_SUCCESS);
+        }
+    }
+
+    masterTransaction.count = len;
     masterTransaction.rxBuf = buf;
 
     return (SPI_transfer(spiHandle, &masterTransaction) ? NVS_STATUS_SUCCESS : NVS_STATUS_ERROR);
+}
+
+/*
+ * Below are the default (weak) GPIO-driver based implementations of:
+ *     NVSSPI25X_initSpiCs()
+ *     NVSSPI25X_deinitSpiCs()
+ *     NVSSPI25X_assertSpiCs()
+ *     NVSSPI25X_deassertSpiCs()
+ */
+
+/*
+ *  ======== NVSSPI25X_initSpiCs =======
+ */
+#if defined(__IAR_SYSTEMS_ICC__)
+__weak void NVSSPI25X_initSpiCs(NVS_Handle nvsHandle, uint16_t csId)
+#elif defined(__GNUC__) && !defined(__ti__)
+void __attribute__((weak)) NVSSPI25X_initSpiCs(NVS_Handle nvsHandle, uint16_t csId)
+#else
+#pragma WEAK (NVSSPI25X_initSpiCs)
+void NVSSPI25X_initSpiCs(NVS_Handle nvsHandle, uint16_t csId)
+#endif
+{
+    if (csId != NVSSPI25X_SPI_MANAGES_CS) {
+        GPIO_init();
+
+        /*
+        * Make SPI Chip Select GPIO an output, and set it high.
+        * Since the same device may be used for multiple regions, configuring
+        * the same Chip Select pin may be done multiple times. No harm done.
+        */
+        GPIO_setConfig(csId, GPIO_CFG_OUT_STD | GPIO_CFG_OUT_HIGH);
+    }
+}
+
+/*
+ *  ======== NVSSPI25X_deinitSpiCs =======
+ */
+#if defined(__IAR_SYSTEMS_ICC__)
+__weak void NVSSPI25X_deinitSpiCs(NVS_Handle nvsHandle, uint16_t csId)
+#elif defined(__GNUC__) && !defined(__ti__)
+void __attribute__((weak)) NVSSPI25X_deinitSpiCs(NVS_Handle nvsHandle, uint16_t csId)
+#else
+#pragma WEAK (NVSSPI25X_deinitSpiCs)
+void NVSSPI25X_deinitSpiCs(NVS_Handle nvsHandle, uint16_t csId)
+#endif
+{
+}
+
+/*
+ *  ======== NVSSPI25X_assertSpiCs =======
+ *  Assert SPI flash /CS
+ */
+#if defined(__IAR_SYSTEMS_ICC__)
+__weak void NVSSPI25X_assertSpiCs(NVS_Handle nvsHandle, uint16_t csId)
+#elif defined(__GNUC__) && !defined(__ti__)
+void __attribute__((weak)) NVSSPI25X_assertSpiCs(NVS_Handle nvsHandle, uint16_t csId)
+#else
+#pragma WEAK (NVSSPI25X_assertSpiCs)
+void NVSSPI25X_assertSpiCs(NVS_Handle nvsHandle, uint16_t csId)
+#endif
+{
+    if (csId != NVSSPI25X_SPI_MANAGES_CS) {
+        GPIO_write(csId, 0);
+    }
+}
+
+/*
+ *  ======== NVSSPI25X_deassertSpiCs =======
+ *  De-assert SPI flash /CS
+ */
+#if defined(__IAR_SYSTEMS_ICC__)
+__weak void NVSSPI25X_deassertSpiCs(NVS_Handle nvsHandle, uint16_t csId)
+#elif defined(__GNUC__) && !defined(__ti__)
+void __attribute__((weak)) NVSSPI25X_deassertSpiCs(NVS_Handle nvsHandle, uint16_t csId)
+#else
+#pragma WEAK (NVSSPI25X_deassertSpiCs)
+void NVSSPI25X_deassertSpiCs(NVS_Handle nvsHandle, uint16_t csId)
+#endif
+{
+    if (csId != NVSSPI25X_SPI_MANAGES_CS) {
+        GPIO_write(csId, 1);
+    }
 }

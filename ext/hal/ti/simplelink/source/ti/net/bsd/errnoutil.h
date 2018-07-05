@@ -29,21 +29,41 @@
  * OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE,
  * EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
-/*
- *  ======== ECDH.c ========
- *
- *  This file contains default values for the ECDH_Params struct
- *
- */
 
-#include <stdlib.h>
+/*****************************************************************************/
+/* Include files                                                             */
+/*****************************************************************************/
 
-#include <ti/drivers/dpl/SemaphoreP.h>
-#include <ti/drivers/ECDH.h>
+#ifndef __ERRNO_UTIL_H__
+#define __ERRNO_UTIL_H__
 
-const ECDH_Params ECDH_defaultParams = {
-    .returnBehavior = ECDH_RETURN_BEHAVIOR_BLOCKING,
-    .callbackFxn = NULL,
-    .timeout = SemaphoreP_WAIT_FOREVER,
-    .custom = NULL,
-};
+#include <stdint.h>
+
+#ifdef    __cplusplus
+extern "C" {
+#endif
+
+/*****************************************************************************/
+/* Include files                                                             */
+/*****************************************************************************/
+
+
+/*****************************************************************************/
+/* Macro declarations                                                        */
+/*****************************************************************************/
+
+/*****************************************************************************/
+/* Structure/Enum declarations                                               */
+/*****************************************************************************/
+
+/*****************************************************************************/
+/* Function prototypes                                                       */
+/*****************************************************************************/
+
+int ErrnoUtil_set(int32_t Errno);
+
+#ifdef  __cplusplus
+}
+#endif /* __cplusplus */
+
+#endif /* __ERRNO_UTIL_H__ */

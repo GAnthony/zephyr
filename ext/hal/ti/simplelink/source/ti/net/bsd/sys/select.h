@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014, Texas Instruments Incorporated
+ * Copyright (c) 2017-2018, Texas Instruments Incorporated
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -30,43 +30,49 @@
  * EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include <stdint.h>
-#include <stdlib.h>
+#ifndef ti_net_bsd_sys_select__include
+#define ti_net_bsd_sys_select__include
 
-#include <ti/drivers/EMAC.h>
+/* include compiler sys/select.h (added in TI ARM 18.1.0.LTS) */
+#if defined(__TMS470__) && (__TI_COMPILER_VERSION__ >= 18001000)
+#define _SELECT_DECLARED
+#include <../include/sys/select.h>
+#endif
 
-/* Externs */
-extern const EMAC_Config EMAC_config[];
+#include <ti/net/bsd/errnoutil.h>
+#include <ti/net/slnetsock.h>
 
-/* Used to check status for initialization */
-static int EMAC_count = -1;
+#ifdef    __cplusplus
+extern "C" {
+#endif
 
-/*
- *  ======== EMAC_init ========
- */
-void EMAC_init(void)
+/* structs */
+#define timeval                             SlNetSock_Timeval_t
+#undef fd_set
+#define fd_set                              SlNetSock_SdSet_t
+
+/* FD_ functions */
+#undef  FD_SETSIZE
+#define FD_SETSIZE                          SLNETSOCK_MAX_CONCURRENT_SOCKETS
+#undef FD_SET
+#define FD_SET                              SlNetSock_sdsSet
+#undef FD_CLR
+#define FD_CLR                              SlNetSock_sdsClr
+#undef FD_ISSET
+#define FD_ISSET                            SlNetSock_sdsIsSet
+#undef FD_ZERO
+#define FD_ZERO                             SlNetSock_sdsClrAll
+
+/* select */
+static inline int select(int nfds, fd_set *readsds, fd_set *writesds, fd_set *exceptsds, struct timeval *timeout)
 {
-    /*
-     *  Allow only the first initialization to do anything.
-     *  The next ones are nops.
-     */
-    if (EMAC_count >= 0) {
-        return;
-    }
-
-    /* Call each driver's init function */
-    for (EMAC_count = 0; EMAC_config[EMAC_count].fxnTablePtr != NULL;
-         EMAC_count++) {
-        EMAC_config[EMAC_count].fxnTablePtr->emacInit(EMAC_count);
-    }
-
-    return;
+    int RetVal = (int)SlNetSock_select(nfds, readsds, writesds, exceptsds, timeout);
+    return ErrnoUtil_set(RetVal);
 }
 
-/*
- *  ======== EMAC_isLinkUp ========
- */
-bool EMAC_isLinkUp(unsigned int index)
-{
-    return (EMAC_config[index].fxnTablePtr->emacIsLinkUp(index));
+
+#ifdef  __cplusplus
 }
+#endif
+
+#endif /* ti_net_bsd_sys_select__include */

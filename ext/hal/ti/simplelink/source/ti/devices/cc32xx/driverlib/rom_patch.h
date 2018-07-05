@@ -100,6 +100,7 @@
 #undef ROM_PRCMMCUReset
 #undef ROM_PRCMPeripheralClkEnable
 #undef ROM_SPIDmaDisable
+#undef ROM_PRCMPeripheralClockGet
 #endif
 
 #if defined(USE_CC3220_ROM_DRV_API)
@@ -107,6 +108,7 @@
 #undef ROM_SDHostDataNonBlockingRead
 #undef ROM_PRCMIORetentionEnable
 #undef ROM_PRCMIORetentionDisable
+#undef ROM_PRCMPeripheralClockGet
 #undef ROM_PRCMCC3200MCUInit
 #undef ROM_SHAMD5ConfigSet
 #undef ROM_SHAMD5HMACKeySet

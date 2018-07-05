@@ -88,17 +88,18 @@
  *  function:
  *  @code
  *    Watchdog_Params params;
- *    Watchdog_Handle watchdog;
+ *    Watchdog_Handle watchdogHandle;
  *
  *    Watchdog_init();
  *
  *    Watchdog_Params_init(&params);
  *    params.resetMode = Watchdog_RESET_ON;
- *    params.callbackFxn = UserCallbackFxn;
+ *    params.callbackFxn = (Watchdog_Callback) UserCallbackFxn;
  *
- *    watchdog = Watchdog_open(Board_WATCHDOG, &params);
- *    if (watchdog == NULL) {
- *        `Error opening watchdog`
+ *    watchdogHandle = Watchdog_open(Board_WATCHDOG0, &params);
+ *    if (watchdogHandle == NULL) {
+ *        // Error opening Watchdog
+ *        while (1);
  *    }
  *  @endcode
  *

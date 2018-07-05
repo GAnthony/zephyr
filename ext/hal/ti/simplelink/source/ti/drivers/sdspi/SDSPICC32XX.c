@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2017, Texas Instruments Incorporated
+ * Copyright (c) 2015-2018, Texas Instruments Incorporated
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -98,9 +98,9 @@
 /*
  * Array of SDSPI_Handles to determine the association of the FatFs drive number
  * with a SDSPI_Handle
- * _VOLUMES is defined in <third_party/fatfs/ffconf.h>
+ * FF_VOLUMES is defined in <third_party/fatfs/ffconf.h>
  */
-static SDSPI_Handle sdspiHandles[_VOLUMES];
+static SDSPI_Handle sdspiHandles[FF_VOLUMES];
 
 /* uS scaling to function timeouts */
 static uint32_t       uSClockPeriod = 0;

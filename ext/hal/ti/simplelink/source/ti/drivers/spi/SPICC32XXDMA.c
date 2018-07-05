@@ -305,14 +305,33 @@ static int postNotifyFxn(unsigned int eventType, uintptr_t eventArg,
  */
 static void spiHwiFxn(uintptr_t arg)
 {
+    uint32_t                      intFlags;
     SPI_Transaction              *msg;
     SPICC32XXDMA_Object          *object = ((SPI_Handle)arg)->object;
     SPICC32XXDMA_HWAttrsV1 const *hwAttrs = ((SPI_Handle)arg)->hwAttrs;
 
-    /* RX DMA channel has completed */
+    /*
+     * Although the DMATX interrupt is not used by this driver, it seems like
+     * it is still triggering DMA interrupts.  The code below will clear &
+     * disable the interrupt thus reducing the amount of spurious interrupts.
+     */
+    intFlags = MAP_SPIIntStatus(hwAttrs->baseAddr, false);
+    if (intFlags & SPI_INT_DMATX) {
+        MAP_SPIIntDisable(hwAttrs->baseAddr, SPI_INT_DMATX);
+        MAP_SPIIntClear(hwAttrs->baseAddr, SPI_INT_DMATX);
+    }
+
+    if (MAP_uDMAChannelIsEnabled(hwAttrs->rxChannelIndex)) {
+        /* DMA has not completed if the channel is still enabled */
+        return;
+    }
+
+    /* RX DMA channel has completed; disable peripheral */
     MAP_SPIDmaDisable(hwAttrs->baseAddr, SPI_RX_DMA | SPI_TX_DMA);
     MAP_SPIIntDisable(hwAttrs->baseAddr, SPI_INT_DMARX);
     MAP_SPIIntClear(hwAttrs->baseAddr, SPI_INT_DMARX);
+    MAP_SPICSDisable(hwAttrs->baseAddr);
+    MAP_SPIDisable(hwAttrs->baseAddr);
 
     if (object->transaction->count - object->amtDataXferred >
         MAX_DMA_TRANSFER_AMOUNT) {
@@ -322,12 +341,7 @@ static void spiHwiFxn(uintptr_t arg)
         configDMA(object, hwAttrs, object->transaction);
     }
     else {
-        /*
-         * All data sent; disable peripheral, set status, perform
-         * callback & return
-         */
-        MAP_SPICSDisable(hwAttrs->baseAddr);
-        MAP_SPIDisable(hwAttrs->baseAddr);
+        /* All data sent; set status, perform callback & return */
         object->transaction->status = SPI_TRANSFER_COMPLETED;
 
         /* Release constraint since transaction is done */
@@ -501,7 +515,7 @@ SPI_Handle SPICC32XXDMA_open(SPI_Handle handle, SPI_Params *params)
     uintptr_t                     key;
     uint16_t                      pin;
     uint16_t                      mode;
-    uint8_t                      powerMgrId;
+    uint8_t                       powerMgrId;
     HwiP_Params                   hwiParams;
     SPICC32XXDMA_Object          *object = handle->object;
     SPICC32XXDMA_HWAttrsV1 const *hwAttrs = handle->hwAttrs;
@@ -642,7 +656,9 @@ bool SPICC32XXDMA_transfer(SPI_Handle handle, SPI_Transaction *transaction)
     SPICC32XXDMA_HWAttrsV1 const *hwAttrs = handle->hwAttrs;
 
     if ((transaction->count == 0) ||
-        (transaction->rxBuf == NULL && transaction->txBuf == NULL)) {
+        (transaction->rxBuf == NULL && transaction->txBuf == NULL) ||
+        (hwAttrs->scratchBufPtr == NULL && (transaction->rxBuf == NULL ||
+            transaction->txBuf == NULL))) {
         return (false);
     }
 

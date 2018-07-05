@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014-2017, Texas Instruments Incorporated
+ * Copyright (c) 2014-2018, Texas Instruments Incorporated
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -84,7 +84,6 @@ int_fast32_t UARTCC32XX_writePolling(UART_Handle handle, const void *buffer,
                 size_t size);
 
 /* Static functions */
-static void errorCallback(UART_Handle handle, uintptr_t error);
 static unsigned int getPowerMgrId(unsigned int baseAddr);
 static void initHw(UART_Handle handle);
 static int  postNotifyFxn(unsigned int eventType, uintptr_t eventArg,
@@ -364,7 +363,9 @@ static void UARTCC32XX_hwiIntFxn(uintptr_t arg)
     rxErrors = MAP_UARTRxErrorGet(hwAttrs->baseAddr);
     if (rxErrors) {
         MAP_UARTRxErrorClear(hwAttrs->baseAddr);
-        errorCallback((UART_Handle)arg, rxErrors);
+        if (hwAttrs->errorFxn) {
+            hwAttrs->errorFxn((UART_Handle)arg, rxErrors);
+        }
     }
 
     if (status & UART_INT_TX) {
@@ -438,25 +439,6 @@ UART_Handle UARTCC32XX_open(UART_Handle handle, UART_Params *params)
     object->state.txEnabled      = false;
     object->txPin                = (uint16_t)-1;
     object->rtsPin               = (uint16_t)-1;
-
-    /*
-     *  Compute appropriate wait time for FIFO to empty out
-     *       Total bits
-     *          - 16 + 1: TX FIFO size + 1
-     *          - 1 bit for start bit
-     *          - 5+(object->dataLength) for total data length (5,6,7,or 8 bits)
-     *          - 1+(object->stopBits) for total stop bit count (1 or 2 bits)
-     *       mutiplied by 1000000 (bits / second)
-     *       divided by object->baudRate (bits / second)
-     *       divided by ClockP_getSystemTickPeriod() (bits (us) / SystemTick)
-     *       In case of high baud rates, this tick count may be less than 1
-     *          system ticks. Add 2 system ticks so that we can guarantee at
-     *          least 1 system tick.
-     */
-    object->writeEmptyClkTimeout = ((16 + 1) * (1 + 5 + object->dataLength +
-        1 + object->stopBits) * 1000000) / object->baudRate;
-    object->writeEmptyClkTimeout /= ClockP_getSystemTickPeriod();
-    object->writeEmptyClkTimeout += 2;
 
     RingBuf_construct(&object->ringBuffer, hwAttrs->ringBufPtr,
         hwAttrs->ringBufSize);
@@ -847,30 +829,6 @@ int_fast32_t UARTCC32XX_writePolling(UART_Handle handle, const void *buf,
 }
 
 /*
- *  ======== errorCallback ========
- *  Generic log function for when unexpected events occur.
- */
-static void errorCallback(UART_Handle handle, uintptr_t error)
-{
-    if (error & UART_RXERROR_OVERRUN) {
-        DebugP_log1("UART:(%p): OVERRUN ERROR",
-            ((UARTCC32XX_HWAttrsV1 const *)handle->hwAttrs)->baseAddr);
-    }
-    if (error & UART_RXERROR_BREAK) {
-        DebugP_log1("UART:(%p): BREAK ERROR",
-            ((UARTCC32XX_HWAttrsV1 const *)handle->hwAttrs)->baseAddr);
-    }
-    if (error & UART_RXERROR_PARITY) {
-        DebugP_log1("UART:(%p): PARITY ERROR",
-            ((UARTCC32XX_HWAttrsV1 const *)handle->hwAttrs)->baseAddr);
-    }
-    if (error & UART_RXERROR_FRAMING) {
-        DebugP_log1("UART:(%p): FRAMING ERROR",
-            ((UARTCC32XX_HWAttrsV1 const *)handle->hwAttrs)->baseAddr);
-    }
-}
-
-/*
  *  ======== getPowerMgrId ========
  */
 static unsigned int getPowerMgrId(unsigned int baseAddr)
@@ -955,7 +913,9 @@ static bool readIsrBinaryBlocking(UART_Handle handle)
     readIn = MAP_UARTCharGetNonBlocking(hwAttrs->baseAddr);
     while (readIn != -1) {
         if (readIn > 0xFF) {
-            errorCallback(handle, (readIn >> 8) & 0xF);
+            if (hwAttrs->errorFxn) {
+                hwAttrs->errorFxn(handle, (uint32_t)((readIn >> 8) & 0xF));
+            }
             MAP_UARTRxErrorClear(hwAttrs->baseAddr);
             return (false);
         }
@@ -989,7 +949,9 @@ static bool readIsrBinaryCallback(UART_Handle handle)
     readIn = MAP_UARTCharGetNonBlocking(hwAttrs->baseAddr);
     while (readIn != -1) {
         if (readIn > 0xFF) {
-            errorCallback(handle, (readIn >> 8) & 0xF);
+            if (hwAttrs->errorFxn) {
+                hwAttrs->errorFxn(handle, (uint32_t)((readIn >> 8) & 0xF));
+            }
             MAP_UARTRxErrorClear(hwAttrs->baseAddr);
             ret = false;
             break;
@@ -1028,7 +990,9 @@ static bool readIsrTextBlocking(UART_Handle handle)
     readIn = MAP_UARTCharGetNonBlocking(hwAttrs->baseAddr);
     while (readIn != -1) {
         if (readIn > 0xFF) {
-            errorCallback(handle, (readIn >> 8) & 0xF);
+            if (hwAttrs->errorFxn) {
+                hwAttrs->errorFxn(handle, (uint32_t)((readIn >> 8) & 0xF));
+            }
             MAP_UARTRxErrorClear(hwAttrs->baseAddr);
             return (false);
         }
@@ -1072,7 +1036,9 @@ static bool readIsrTextCallback(UART_Handle handle)
     readIn = MAP_UARTCharGetNonBlocking(hwAttrs->baseAddr);
     while (readIn != -1) {
         if (readIn > 0xFF) {
-            errorCallback(handle, (readIn >> 8) & 0xF);
+            if (hwAttrs->errorFxn) {
+                hwAttrs->errorFxn(handle, (uint32_t)((readIn >> 8) & 0xF));
+            }
             MAP_UARTRxErrorClear(hwAttrs->baseAddr);
             ret = false;
             break;
@@ -1235,10 +1201,19 @@ static int readTaskCallback(UART_Handle handle)
     }
 
     if (!object->readCount || makeCallback) {
-        tempCount = object->readSize;
-        object->readSize = 0;
-        object->readCallback(handle, object->readBuf,
-            tempCount - object->readCount);
+        object->state.readCallbackPending = true;
+        if (object->state.inReadCallback == false) {
+            while (object->state.readCallbackPending) {
+                object->state.readCallbackPending = false;
+                tempCount = object->readSize;
+                object->readSize = 0;
+
+                object->state.inReadCallback = true;
+                object->readCallback(handle, object->readBuf,
+                        tempCount - object->readCount);
+                object->state.inReadCallback = false;
+            }
+        }
     }
     else {
         object->state.drainByISR = true;

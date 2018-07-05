@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2017, Texas Instruments Incorporated
+ * Copyright (c) 2015-2018, Texas Instruments Incorporated
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -125,7 +125,7 @@ static const uint8_t pinTable[] = {
     /* 16     17      18      19      20      21      22      23  */
     PIN_07, PIN_08, PIN_XX, PIN_XX, PIN_XX, PIN_XX, PIN_15, PIN_16,
     /* 24     25      26      27      28      29      30      31  */
-    PIN_17, PIN_21, PIN_XX, PIN_XX, PIN_18, PIN_20, PIN_53, PIN_45,
+    PIN_17, PIN_21, PIN_29, PIN_30, PIN_18, PIN_20, PIN_53, PIN_45,
     /* 32 */
     PIN_52
 };
@@ -238,12 +238,10 @@ static int powerNotifyFxn(unsigned int eventType, uintptr_t eventArg,
 static inline uint32_t getPinNumber(uint32_t x) {
 #if defined(__TI_COMPILER_VERSION__)
     return (uint32_t)(__clz(__rbit(x)) & 0x7);
-#elif defined(codered) || defined(__GNUC__) || defined(sourcerygxx)
+#elif defined(__GNUC__)
     return (uint32_t)(__builtin_ctz(x) & 0x7);
 #elif defined(__IAR_SYSTEMS_ICC__)
     return (uint32_t)(__CLZ(__RBIT(x)) & 0x7);
-#elif defined(rvmdk) || defined(__ARMCC_VERSION)
-    return (uint32_t)(__clz(__rbit(x)) & 0x7);
 #else
     #error "Unsupported compiler used"
 #endif
@@ -298,6 +296,8 @@ void GPIO_enableInt(uint_least8_t index)
     PinConfig *config = (PinConfig *) &GPIOCC32XX_config.pinConfigs[index];
 
     DebugP_assert(initCalled && index < GPIOCC32XX_config.numberOfPinConfigs);
+    DebugP_assert(*((uint16_t *) config) != GPIOCC32XX_GPIO_26 &&
+        *((uint16_t *) config) != GPIOCC32XX_GPIO_27);
 
     /* Make atomic update */
     key = HwiP_disable();
@@ -435,6 +435,8 @@ uint_fast8_t GPIO_read(uint_least8_t index)
     PinConfig *config = (PinConfig *) &GPIOCC32XX_config.pinConfigs[index];
 
     DebugP_assert(initCalled && index < GPIOCC32XX_config.numberOfPinConfigs);
+    DebugP_assert(*((uint16_t *) config) != GPIOCC32XX_GPIO_26 &&
+        *((uint16_t *) config) != GPIOCC32XX_GPIO_27);
 
     value = MAP_GPIOPinRead(getPortBase(config->port), config->pin);
 
@@ -456,6 +458,8 @@ void GPIO_setCallback(uint_least8_t index, GPIO_CallbackFxn callback)
     PinConfig *config = (PinConfig *) &GPIOCC32XX_config.pinConfigs[index];
 
     DebugP_assert(initCalled && index < GPIOCC32XX_config.numberOfCallbacks);
+    DebugP_assert(*((uint16_t *) config) != GPIOCC32XX_GPIO_26 &&
+        *((uint16_t *) config) != GPIOCC32XX_GPIO_27);
 
     /*
      * plug the pin index into the corresponding
@@ -501,6 +505,9 @@ int_fast16_t GPIO_setConfig(uint_least8_t index, GPIO_PinConfig pinConfig)
     PinConfig     *config = (PinConfig *) &GPIOCC32XX_config.pinConfigs[index];
 
     DebugP_assert(initCalled && index < GPIOCC32XX_config.numberOfPinConfigs);
+    DebugP_assert(*((uint16_t *) config) != GPIOCC32XX_GPIO_26 &&
+        *((uint16_t *) config) != GPIOCC32XX_GPIO_27 ||
+        (pinConfig & GPIO_CFG_INPUT) == 0);
 
     if (pinConfig & GPIO_DO_NOT_CONFIG) {
         return (GPIO_STATUS_SUCCESS);
@@ -514,7 +521,7 @@ int_fast16_t GPIO_setConfig(uint_least8_t index, GPIO_PinConfig pinConfig)
     key = HwiP_disable();
 
     /* set the pin's pinType to GPIO */
-    MAP_PinModeSet(pin, PIN_MODE_0);
+    PinModeSet(pin, PIN_MODE_0);
 
     /* enable clocks for the GPIO port */
     Power_setDependency(getPowerResource(config->port));
@@ -543,7 +550,7 @@ int_fast16_t GPIO_setConfig(uint_least8_t index, GPIO_PinConfig pinConfig)
 
         /* Configure the GPIO pin */
         MAP_GPIODirModeSet(portBase, pinMask, direction);
-        MAP_PinConfigSet(pin, strength, pinType);
+        PinConfigSet(pin, strength, pinType);
 
         /* Set output value */
         if (direction == GPIO_DIR_MODE_OUT) {

@@ -36,7 +36,7 @@
 /******************************************************************************
 * 	cc_pal.c
 *
-*   SimpleLink Wi-Fi abstraction file for CC3220
+*   SimpleLink Wi-Fi abstraction file for CC32xx
 ******************************************************************************/
 
 /* Board includes */
@@ -49,6 +49,7 @@
 #include <ti/devices/cc32xx/inc/hw_udma.h>
 #include <ti/devices/cc32xx/inc/hw_types.h>
 #include <ti/devices/cc32xx/inc/hw_memmap.h>
+#include <ti/devices/cc32xx/inc/hw_gprcm.h>
 #include <ti/devices/cc32xx/inc/hw_mcspi.h>
 #include <ti/devices/cc32xx/inc/hw_common_reg.h>
 #include <ti/devices/cc32xx/inc/hw_ocp_shared.h>
@@ -120,6 +121,7 @@
 #define uSEC_DELAY(x)                   (ROM_UtilsDelayDirect(x*80/3))
 #define MAX_DMA_RECV_TRANSACTION_SIZE   (4096)
 #define SPI_RATE_20M                    (20000000)
+#define SPI_RATE_30M                    (30000000)
 
 HwiP_Handle g_intHandle = 0;
 
@@ -137,7 +139,16 @@ Fd_t spi_Open(char *ifName, unsigned long flags)
 	/* configure the SPI settings */
 	SPI_Config.transferMode = SPI_MODE_BLOCKING;
 	SPI_Config.mode = SPI_MASTER;
-	SPI_Config.bitRate = SPI_RATE_20M;
+
+    /* Check NWP generation */
+    if((HWREG(GPRCM_BASE + GPRCM_O_GPRCM_DIEID_READ_REG4) >> 24) & 0x02)
+    {
+        SPI_Config.bitRate = SPI_RATE_30M;
+    }
+    else
+    {
+        SPI_Config.bitRate = SPI_RATE_20M;
+    }
 	SPI_Config.dataSize = 32;
 	SPI_Config.frameFormat = SPI_POL0_PHA0;
 
@@ -400,62 +411,103 @@ int Semaphore_create_handle(SemaphoreP_Handle* pSemHandle)
 
 	if(!(*(pSemHandle)))
 	{
-		return SemaphoreP_FAILURE ;
+		return Semaphore_FAILURE ;
 	}
 
-	return SemaphoreP_OK;
+	return Semaphore_OK;
 }
 
 int SemaphoreP_delete_handle(SemaphoreP_Handle* pSemHandle)
 {
     SemaphoreP_delete(*(pSemHandle));
-    return SemaphoreP_OK;
+    return Semaphore_OK;
 }
 
 int SemaphoreP_post_handle(SemaphoreP_Handle* pSemHandle)
 {
     SemaphoreP_post(*(pSemHandle));
-    return SemaphoreP_OK;
+    return Semaphore_OK;
 }
 
+#if defined(SL_PLATFORM_MULTI_THREADED)
+int Mutex_create_handle(pthread_mutex_t *pMutexHandle)
+{
+    pthread_mutexattr_t attr;
+    pthread_mutexattr_init(&attr);
+    pthread_mutexattr_settype(&attr, PTHREAD_MUTEX_RECURSIVE);
+
+    if (pthread_mutex_init(pMutexHandle, &attr) < 0)
+    {
+        return Mutex_FAILURE ;
+    }
+
+    return Mutex_OK;
+}
+
+
+int  MutexP_delete_handle(pthread_mutex_t *pMutexHandle)
+{
+
+    pthread_mutex_destroy(pMutexHandle);
+    return(Mutex_OK);
+}
+
+
+int Mutex_unlock(pthread_mutex_t *pMutexHandle)
+{
+
+	pthread_mutex_unlock(pMutexHandle);
+    return(Mutex_OK);
+}
+
+
+
+int Mutex_lock(pthread_mutex_t *pMutexHandle)
+{
+	pthread_mutex_lock(pMutexHandle);
+	return(Mutex_OK);
+}
+#else
 
 int Mutex_create_handle(MutexP_Handle* pMutexHandle)
 {
     MutexP_Params params;
 
     MutexP_Params_init(&params);
-#ifndef SL_PLATFORM_MULTI_THREADED
+
     params.callback = tiDriverSpawnCallback;
-#endif    
 
-	(*(pMutexHandle)) = MutexP_create(&params);
+    (*(pMutexHandle)) = MutexP_create(&params);
 
-	if(!(*(pMutexHandle)))
-	{
-		return MutexP_FAILURE ;
-	}
+    if(!(*(pMutexHandle)))
+    {
+        return Mutex_FAILURE ;
+    }
 
-	return MutexP_OK;
+    return Mutex_OK;
 }
 
 int  MutexP_delete_handle(MutexP_Handle* pMutexHandle)
 {
     MutexP_delete(*(pMutexHandle));
-    return(MutexP_OK);
+    return(Mutex_OK);
 }
 
 int Mutex_unlock(MutexP_Handle pMutexHandle)
 {
-	MutexP_unlock(pMutexHandle, 0);
-	return(MutexP_OK);
+    MutexP_unlock(pMutexHandle, 0);
+    return(Mutex_OK);
 }
 
 
 int Mutex_lock(MutexP_Handle pMutexHandle)
 {
-	MutexP_lock(pMutexHandle);
-	return(MutexP_OK);
+    MutexP_lock(pMutexHandle);
+    return(Mutex_OK);
 }
+
+
+#endif
 
 
 unsigned long TimerGetCurrentTimestamp()

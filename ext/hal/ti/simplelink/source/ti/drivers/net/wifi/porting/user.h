@@ -55,30 +55,129 @@ typedef signed int _SlFd_t;
 #define SL_TIMESTAMP_MAX_VALUE                    (_u32)(0xFFFFFFFF)
 
 /*!
-	\def		MAX_CONCURRENT_ACTIONS
+ ******************************************************************************
+
+    \defgroup   configuration_mem_mgm             Configuration - Memory Management
+
+    This section declare in which memory management model the SimpleLink driver
+    will run:
+        -# Static
+        -# Dynamic
+
+    This section IS NOT REQUIRED in case Static model is selected.
+
+    The default memory model is Static
+
+
+    @{
+
+ *****************************************************************************
+*/
+
+/*!
+    \brief      Defines whether the SimpleLink driver is working in dynamic
+                memory model or not
+
+                When defined, the SimpleLink driver use dynamic allocations
+                if dynamic allocation is selected malloc and free functions
+                must be retrieved
+
+    \sa
+
+    \note       belongs to \ref configuration_sec
+
+    \warning
+*/
+
+#define SL_MEMORY_MGMT_DYNAMIC
+
+#ifdef SL_MEMORY_MGMT_DYNAMIC
+
+
+#include <stdlib.h>
+/*!
+    \brief
+    \sa
+    \note           belongs to \ref configuration_sec
+    \warning        
+*/
+#define sl_Malloc(Size)                                 malloc(Size)
+
+/*!
+    \brief
+    \sa
+    \note           belongs to \ref configuration_sec
+    \warning        
+*/
+#define sl_Free(pMem)                                   free(pMem)
+#endif
+
+
+/*!
+
+ Close the Doxygen group.
+ @}
+
+*/
+
+/*!
+
+    \def        MAX_CONCURRENT_ACTIONS
 
     \brief      Defines the maximum number of concurrent action in the system
-				Min:1 , Max: 32
-
-                Actions which has async events as return, can be
+                Min:1 , Max: 32
+                    
+                Actions which has async events as return, will be blocked until the event arrive 
 
     \sa
 
     \note       In case there are not enough resources for the actions needed in the system,
-	        	error is received: POOL_IS_EMPTY
-			    one option is to increase MAX_CONCURRENT_ACTIONS
-				(improves performance but results in memory consumption)
-		     	Other option is to call the API later (decrease performance)
+                error is received: SL_POOL_IS_EMPTY
+                one option is to increase MAX_CONCURRENT_ACTIONS
+                (improves performance but results in memory consumption)
+                Other option is to call the API later (decrease performance)
+
+                Async events which arrive during command context will be dynamically or static
+                allocated and handled in spawn context. If MAX_CONCURRENT_ACTIONS
+                is high, there will be more events which might arrive during this period.
+                Due to memory constrains MAX_CONCURRENT_ACTIONS is lower in static allocation mode.
+
 
     \warning    In case of setting to one, recommend to use non-blocking recv\recvfrom to allow
-				multiple socket recv
+                multiple socket recv
 */
 #ifndef SL_TINY_EXT
-#define MAX_CONCURRENT_ACTIONS 10
+#ifdef SL_MEMORY_MGMT_DYNAMIC
+#define MAX_CONCURRENT_ACTIONS 18
+#else
+#define MAX_CONCURRENT_ACTIONS 5
+#endif
 #else
 #define MAX_CONCURRENT_ACTIONS 1
 #endif
+    /*!
+    \def        SL_MAX_ASYNC_BUFFERS
 
+
+
+    \brief      Defines the maximum static buffers to store asycn events which
+                arrives during command context. The event is stored in a buffer (if free)
+                and handle in spwan cotext. value must be set to MAX_CONCURRENT_ACTIONS which
+                is the maximum simultaniuos async event which could arrive in command context.
+    value:      MAX_CONCURRENT_ACTIONS
+
+    \sa
+
+    \note       Events which arrive when there is no free buffer will be dropped.
+                If there is a command which is waiting on this event, it will be released
+                with error SL_RET_CODE_NO_FREE_ASYNC_BUFFERS_ERROR.
+                In this case need to increase MAX_CONCURRENT_ACTIONS
+                (improves performance but results in memory consumption)
+
+
+    */
+    
+#define SL_MAX_ASYNC_BUFFERS  MAX_CONCURRENT_ACTIONS
 /*!
 	\def		CPU_FREQ_IN_MHZ
     \brief      Defines CPU frequency for Host side, for better accuracy of busy loops, if any
@@ -146,37 +245,6 @@ typedef signed int _SlFd_t;
 */
 #define SL_INC_ARG_CHECK
 
-
-/*!
-    \def		SL_INC_INTERNAL_ERRNO
-
-    \brief      Defines whether SimpleLink driver should employ it's internal errno
-                setter and getter to comply with BSD.
-                (Usually, this kind of mechanism should be handled by the OS).
-
-                When defined, the SimpleLink driver would set and manage the errno variable
-                per thread, to the various returned errors by the standard BSD API.
-                The BSD API includes the following functions:
-                socket, close, accept, bind, listen, connect, select,
-                setsockopt, getsockopt, recv, recvfrom, send, sendto,
-                gethostbyname. Furthermore, the user's application can read errno's value.
-                When not defined, user must provide an errno setter, such that the SimpleLink driver
-                would use the users's external errno meachnism to set an error code.
-
-    \sa         slcb_SetErrno
-
-    \note       belongs to \ref configuration_sec
-
-    \warning    Query errno in the user's application is by simply invoking the macro 'errno'
-                which returns a dereferenced pointer to the allocated calling thread's errno value.
-                If the user choose to change, write to or modifiy the value of errno in any way,
-                It might overwrite the errno value allocated to any other thread at the point in time.
-                (Once errno has been read, the driver assumes it can be allocated to another thread).
-*/
-
-/* Zephyr Port: use Zephyr's errno mechanism:
-#define SL_INC_INTERNAL_ERRNO
-*/
 
 /*!
     \brief      Defines whether to include extended API in SimpleLink driver
@@ -672,36 +740,6 @@ typedef signed int _SlFd_t;
 
 #define WAIT_NWP_SHUTDOWN_READY          NwpWaitForShutDownInd()
 
-/*!
-    \brief      User's errno setter function. User must provide an errno setter
-                in order to let the SimpleLink Wi-Fi driver to support BSD API
-                alongside the user's errno mechanism.
-
-    \param      None.
-
-    \sa         SL_INC_INTERNAL_ERRNO
-
-    \note
-
-    \note       belongs to \ref porting_sec
-
-    \warning
-*/
-#ifndef SL_INC_INTERNAL_ERRNO
-/*
- * Zephyr Port: use Zephyr SDK's errno.h definitions, and supply those missing
- * to allow the SimpleLink driver.c to compile
- * Also, supply the external errno setter function.
- */
-#include <errno.h>
-#define ERROR  EIO
-#define INEXE  EALREADY
-#define ENSOCK ENFILE
-
-#include <dpl.h>
-#define slcb_SetErrno dpl_set_errno
-
-#endif
 
 /*!
  Close the Doxygen group.
@@ -801,7 +839,7 @@ typedef signed int _SlFd_t;
 /*!
 	\brief 	This function creates a sync object
 
-	The sync object is used for synchronization between diffrent thread or ISR and
+	The sync object is used for synchronization between different thread or ISR and
 	a thread.
 
 	\param	pSyncObj	-	pointer to the sync object control block
@@ -875,12 +913,87 @@ typedef signed int _SlFd_t;
 */
 #define sl_SyncObjWait(pSyncObj,Timeout)            SemaphoreP_pend((*(pSyncObj)),Timeout)
 
-
+#if defined(SL_PLATFORM_MULTI_THREADED)
 /*!
 	\brief 	type definition for a locking object container
 
 	Locking object are used to protect a resource from mutual accesses of two or more threads.
-	The locking object should suppurt reentrant locks by a signal thread.
+	The locking object should support reentrant locks by a signal thread.
+	This object is generally implemented by mutex semaphore
+
+	\note	On each configuration or platform the type could be whatever is needed - integer, structure etc.
+    \note       belongs to \ref configuration_sec
+*/
+#define _SlLockObj_t 			             pthread_mutex_t 
+
+/*!
+	\brief 	This function creates a locking object.
+
+	The locking object is used for protecting a shared resources between different
+	threads.
+
+	\param	pLockObj	-	pointer to the locking object control block
+
+	\return upon successful creation the function should return 0
+			Otherwise, a negative value indicating the error code shall be returned
+    \note       belongs to \ref configuration_sec
+    \warning
+*/
+#define sl_LockObjCreate(pLockObj, pName)     Mutex_create_handle(pLockObj)
+
+
+/*!
+	\brief 	This function deletes a locking object.
+
+	\param	pLockObj	-	pointer to the locking object control block
+
+	\return upon successful deletion the function should return 0
+			Otherwise, a negative value indicating the error code shall be returned
+    \note       belongs to \ref configuration_sec
+    \warning
+*/
+#define sl_LockObjDelete(pLockObj)                  MutexP_delete_handle(pLockObj)
+
+
+/*!
+	\brief 	This function locks a locking object.
+
+	All other threads that call this function before this thread calls
+	the osi_LockObjUnlock would be suspended
+
+	\param	pLockObj	-	pointer to the locking object control block
+	\param	Timeout		-	numeric value specifies the maximum number of mSec to
+							stay suspended while waiting for the locking object
+							Currently, the SimpleLink driver uses only two values:
+								- OSI_WAIT_FOREVER
+								- OSI_NO_WAIT
+
+
+	\return upon successful reception of the locking object the function should return 0
+			Otherwise, a negative value indicating the error code shall be returned
+    \note       belongs to \ref configuration_sec
+    \warning
+*/
+#define sl_LockObjLock(pLockObj,Timeout)          Mutex_lock(pLockObj) 
+
+
+/*!
+	\brief 	This function unlock a locking object.
+
+	\param	pLockObj	-	pointer to the locking object control block
+
+	\return upon successful unlocking the function should return 0
+			Otherwise, a negative value indicating the error code shall be returned
+    \note       belongs to \ref configuration_sec
+    \warning
+*/
+#define sl_LockObjUnlock(pLockObj)                  Mutex_unlock(pLockObj)
+#else
+/*!
+	\brief 	type definition for a locking object container
+
+	Locking object are used to protect a resource from mutual accesses of two or more threads.
+	The locking object should support reentrant locks by a signal thread.
 	This object is generally implemented by mutex semaphore
 
 	\note	On each configuration or platform the type could be whatever is needed - integer, structure etc.
@@ -951,6 +1064,7 @@ typedef signed int _SlFd_t;
 */
 #define sl_LockObjUnlock(pLockObj)                   Mutex_unlock(*(pLockObj))
 
+#endif
 
 /*!
 	\brief 	This function call the pEntry callback from a different context
@@ -970,11 +1084,10 @@ typedef signed int _SlFd_t;
     
     \warning                User must implement it's own 'os_Spawn' function.
 */
-#define SL_PLATFORM_EXTERNAL_SPAWN
+//#define SL_PLATFORM_EXTERNAL_SPAWN
 
 #ifdef SL_PLATFORM_EXTERNAL_SPAWN
-extern  _i16 os_Spawn(P_OS_SPAWN_ENTRY pEntry, void *pValue, unsigned long flags);
-#define sl_Spawn(pEntry,pValue,flags)       os_Spawn(pEntry,pValue,flags)
+#define sl_Spawn(pEntry,pValue,flags)       os_Spawn(pEntry,pValue,flags)        
 #endif
 
 /*!
@@ -983,93 +1096,6 @@ extern  _i16 os_Spawn(P_OS_SPAWN_ENTRY pEntry, void *pValue, unsigned long flags
  @}
 
  */
-/*!
- ******************************************************************************
-
-    \defgroup   configuration_mem_mgm             Configuration - Memory Management
-
-    This section declare in which memory management model the SimpleLink driver
-    will run:
-        -# Static
-        -# Dynamic
-
-    This section IS NOT REQUIRED in case Static model is selected.
-
-    The default memory model is Static
-
-
-    @{
-
- *****************************************************************************
-*/
-
-/*!
-    \brief      Defines whether the SimpleLink driver is working in dynamic
-                memory model or not
-
-                When defined, the SimpleLink driver use dynamic allocations
-                if dynamic allocation is selected malloc and free functions
-                must be retrieved
-
-    \sa
-
-    \note       belongs to \ref configuration_sec
-
-    \warning
-*/
-/*
-#define SL_MEMORY_MGMT_DYNAMIC 	1
-#define SL_MEMORY_MGMT_STATIC  0
-
-#define SL_MEMORY_MGMT  SL_MEMORY_MGMT_DYNAMIC
-*/
-#ifdef SL_MEMORY_MGMT_DYNAMIC
-
-#ifdef SL_PLATFORM_MULTI_THREADED
-
-/*!
-    \brief
-    \sa
-    \note           belongs to \ref configuration_sec
-    \warning
-*/
-#define sl_Malloc(Size)                                 mem_Malloc(Size)
-
-/*!
-    \brief
-    \sa
-    \note           belongs to \ref configuration_sec
-    \warning
-*/
-#define sl_Free(pMem)                                   mem_Free(pMem)
-
-#else
-#include <stdlib.h>
-/*!
-    \brief
-    \sa
-    \note           belongs to \ref configuration_sec
-    \warning        
-*/
-#define sl_Malloc(Size)                                 malloc(Size)
-
-/*!
-    \brief
-    \sa
-    \note           belongs to \ref configuration_sec
-    \warning        
-*/
-#define sl_Free(pMem)                                   free(pMem)
-#endif
-                        
-#endif
-
-/*!
-
- Close the Doxygen group.
- @}
-
-*/
 
 /*!
  ******************************************************************************

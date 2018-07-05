@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2017, Texas Instruments Incorporated
+ * Copyright (c) 2015-2018, Texas Instruments Incorporated
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -155,6 +155,7 @@ extern "C" {
 #endif
 
 #include <stdbool.h>
+#include <ti/drivers/Power.h>
 #include <ti/drivers/PWM.h>
 
 /*! \cond */

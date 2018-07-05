@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017, Texas Instruments Incorporated
+ * Copyright (c) 2017-2018, Texas Instruments Incorporated
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -29,23 +29,29 @@
  * OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE,
  * EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
-/*
- *  ======== AESCCM.c ========
- *
- *  This file contains default values for the AESCCM_Params struct.
- *
- */
 
-#include <stdbool.h>
-#include <stdlib.h>
+#ifndef ti_net_bsd_arpa_inet__include
+#define ti_net_bsd_arpa_inet__include
 
-#include <ti/drivers/AESCCM.h>
-#include <ti/drivers/dpl/SemaphoreP.h>
+#include <ti/net/slnetutils.h>
 
-const AESCCM_Params AESCCM_defaultParams = {
-    .returnBehavior = AESCCM_RETURN_BEHAVIOR_BLOCKING,
-    .callbackFxn = NULL,
-    .nonceInternallyGenerated = false,
-    .timeout = SemaphoreP_WAIT_FOREVER,
-    .custom = NULL,
-};
+#ifdef    __cplusplus
+extern "C" {
+#endif
+
+/* byte reorder macros */
+#define htonl                SlNetUtil_htonl
+#define ntohl                SlNetUtil_ntohl
+#define htons                SlNetUtil_htons
+#define ntohs                SlNetUtil_ntohs
+
+/* utility functions */
+#define inet_aton            SlNetUtil_inetAton
+#define inet_ntop            SlNetUtil_inetNtop
+#define inet_pton            SlNetUtil_inetPton
+
+#ifdef  __cplusplus
+}
+#endif
+
+#endif /* ti_net_bsd_arpa_inet__include */

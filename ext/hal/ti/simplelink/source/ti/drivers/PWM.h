@@ -302,10 +302,10 @@ extern "C" {
  *  implementation if using PWM_PERIOD_COUNTS (raw PWM/Timer counts).
  */
 typedef enum PWM_Period_Units_ {
-    PWM_PERIOD_US,    /* Period in microseconds */
-    PWM_PERIOD_HZ,    /* Period in (reciprocal) Hertz
+    PWM_PERIOD_US,    /*!< Period in microseconds */
+    PWM_PERIOD_HZ,    /*!< Period in (reciprocal) Hertz
                          (for example 2MHz = 0.5us period) */
-    PWM_PERIOD_COUNTS /* Period in timer counts */
+    PWM_PERIOD_COUNTS /*!< Period in timer counts */
 } PWM_Period_Units;
 
 /*!
@@ -313,9 +313,9 @@ typedef enum PWM_Period_Units_ {
  *  implementation if using PWM_DUTY_COUNTS (raw PWM/Timer counts).
  */
 typedef enum PWM_Duty_Units_ {
-    PWM_DUTY_US,       /* Duty cycle in microseconds */
-    PWM_DUTY_FRACTION, /* Duty as a fractional part of PWM_DUTY_FRACTION_MAX */
-    PWM_DUTY_COUNTS    /* Duty in timer counts  */
+    PWM_DUTY_US,       /*!< Duty cycle in microseconds */
+    PWM_DUTY_FRACTION, /*!< Duty as a fractional part of PWM_DUTY_FRACTION_MAX */
+    PWM_DUTY_COUNTS    /*!< Duty in timer counts  */
 } PWM_Duty_Units;
 
 /*!

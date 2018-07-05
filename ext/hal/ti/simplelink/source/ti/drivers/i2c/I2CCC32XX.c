@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2017, Texas Instruments Incorporated
+ * Copyright (c) 2015-2018, Texas Instruments Incorporated
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -484,6 +484,9 @@ I2C_Handle I2CCC32XX_open(I2C_Handle handle, I2C_Params *params)
     HwiP_Params                hwiParams;
     uint16_t                   pin;
     uint16_t                   mode;
+
+    /* Check for valid bit rate */
+    DebugP_assert(params->bitRate <= I2C_400kHz);
 
     /* Determine if the device index was already opened */
     key = HwiP_disable();

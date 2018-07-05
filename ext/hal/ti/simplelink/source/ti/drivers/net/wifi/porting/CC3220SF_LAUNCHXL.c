@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017, Texas Instruments Incorporated
+ * Copyright (c) 2018, Texas Instruments Incorporated
  *
  * SPDX-License-Identifier: Apache-2.0
  *

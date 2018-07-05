@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2016, Texas Instruments Incorporated
+ * Copyright (c) 2015-2017, Texas Instruments Incorporated
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -30,14 +30,14 @@
  * EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 /*
- *  ======== SDSPI.c ========
+ *  ======== SDSPILegacy.c ========
  */
 
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdlib.h>
 
-#include <ti/drivers/SDSPI.h>
+#include <ti/drivers/SDSPILegacy.h>
 #include <ti/drivers/dpl/HwiP.h>
 
 extern const SDSPI_Config SDSPI_config[];
@@ -52,25 +52,26 @@ const SDSPI_Params SDSPI_defaultParams = {
 static bool isInitialized = false;
 
 /*
- *  ======== SDSPI_close ========
+ *  ======== SDSPILegacy_close ========
  */
-void SDSPI_close(SDSPI_Handle handle)
+void SDSPILegacy_close(SDSPI_Handle handle)
 {
     handle->fxnTablePtr->closeFxn(handle);
 }
 
 /*
- *  ======== SDSPI_control ========
+ *  ======== SDSPILegacy_control ========
  */
-int_fast16_t SDSPI_control(SDSPI_Handle handle, uint_fast16_t cmd, void *arg)
+int_fast16_t SDSPILegacy_control(SDSPI_Handle handle, uint_fast16_t cmd,
+    void *arg)
 {
     return (handle->fxnTablePtr->controlFxn(handle, cmd, arg));
 }
 
 /*
- *  ======== SDSPI_init ========
+ *  ======== SDSPILegacy_init ========
  */
-void SDSPI_init(void)
+void SDSPILegacy_init(void)
 {
     uint_least8_t i;
     uint_fast32_t key;
@@ -90,9 +91,10 @@ void SDSPI_init(void)
 }
 
 /*
- *  ======== SDSPI_open ========
+ *  ======== SDSPILegacy_open ========
  */
-SDSPI_Handle SDSPI_open(uint_least8_t index, uint_least8_t drv, SDSPI_Params *params)
+SDSPI_Handle SDSPILegacy_open(uint_least8_t index, uint_least8_t drv,
+    SDSPI_Params *params)
 {
     SDSPI_Handle handle = NULL;
 
@@ -111,17 +113,16 @@ SDSPI_Handle SDSPI_open(uint_least8_t index, uint_least8_t drv, SDSPI_Params *pa
 }
 
 /*
- *  ======== SDSPI_Params_init ========
+ *  ======== SDSPILegacy_Params_init ========
  *
  *  Defaults values are:
  *  @code
- *  bitRate             = 12500000 (Hz) //CC32XX
- *  bitRate             = 2500000  (Hz) //MSP432
+ *  bitRate = 2500000 (Hz)
  *  @endcode
  *
  *  @param  params  Parameter structure to initialize
  */
-void SDSPI_Params_init(SDSPI_Params *params)
+void SDSPILegacy_Params_init(SDSPI_Params *params)
 {
     *params = SDSPI_defaultParams;
 }
