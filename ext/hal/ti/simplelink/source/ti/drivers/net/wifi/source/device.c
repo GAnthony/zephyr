@@ -50,10 +50,6 @@ static _i16 _SlDeviceGetStartResponseConvert(_i32 Status);
 void _SlDeviceHandleResetRequestInternally(void);
 void _SlDeviceResetRequestInitCompletedCB(_u32 Status, SlDeviceInitInfo_t *DeviceInitInfo);
 
-#ifdef SL_PLATFORM_MULTI_THREADED
-extern void usleep(int usec);
-#endif
-
 #define RESET_REQUEST_STOP_TIMEOUT (300)
 
 #ifndef SL_IF_OPEN_FLAGS
