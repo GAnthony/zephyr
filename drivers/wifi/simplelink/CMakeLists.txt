@@ -7,7 +7,8 @@ if(CONFIG_WIFI_SIMPLELINK)
     $ENV{ZEPHYR_BASE}/ext/hal/ti/simplelink/source/ti/drivers/net/wifi/bsd
     )
   zephyr_sources(
-    simplelink_support.c
     simplelink.c
+    simplelink_support.c
+    simplelink_offload.c
     )
 endif()

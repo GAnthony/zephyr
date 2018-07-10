@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2018 Texas Instruments, Incorporated
+ * Copyright (c) 2018 Linaro Limited
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -15,8 +15,11 @@
 #include <net/wifi_mgmt.h>
 #include <net/net_offload.h>
 
-#include <ti/drivers/net/wifi/wlan.h>
+#include <ti/drivers/net/wifi/simplelink.h>
+#include <ti/drivers/net/wifi/source/driver.h>
+
 #include "simplelink_support.h"
+#include "simplelink_offload.h"
 
 #define SCAN_RETRY_DELAY 2000  /* ms */
 
@@ -72,19 +75,6 @@ static void simplelink_wifi_cb(u32_t event, struct sl_connect_state *conn)
 		break;
 	}
 }
-
-/* TBD: Only here to link/test WiFi mgmnt part */
-static struct net_offload simplelink_offload = {
-	.get            = NULL,
-	.bind		= NULL,
-	.listen		= NULL,
-	.connect	= NULL,
-	.accept		= NULL,
-	.send		= NULL,
-	.sendto		= NULL,
-	.recv		= NULL,
-	.put		= NULL,
-};
 
 static void simplelink_scan_work_handler(struct k_work *work)
 {
@@ -185,6 +175,27 @@ static int simplelink_mgmt_disconnect(struct device *dev)
 
 static void simplelink_iface_init(struct net_if *iface)
 {
+	int ret;
+
+	simplelink_data.iface = iface;
+
+	/* Initialize and configure NWP to defaults: */
+	ret = _simplelink_init(simplelink_wifi_cb);
+	if (ret) {
+		SYS_LOG_ERR("_simplelink_init failed!");
+		return;
+	}
+
+	/* Start our socket select server, to handle NET_OFFLOAD operations: */
+	ret = _simplelink_offload_select_server_init();
+	if (ret) {
+		SYS_LOG_ERR("select_server_init failed!");
+		return;
+	}
+
+	/* Grab our MAC address: */
+	_simplelink_get_mac(simplelink_data.mac);
+
 	SYS_LOG_DBG("MAC Address %02X:%02X:%02X:%02X:%02X:%02X",
 		    simplelink_data.mac[0], simplelink_data.mac[1],
 		    simplelink_data.mac[2],
@@ -195,10 +206,9 @@ static void simplelink_iface_init(struct net_if *iface)
 			     sizeof(simplelink_data.mac),
 			     NET_LINK_ETHERNET);
 
-	/* TBD: Pending support for socket offload: */
-	iface->if_dev->offload = &simplelink_offload;
+	iface->if_dev->offload = &simplelink_offload_fxns;
 
-	simplelink_data.iface = iface;
+	SYS_LOG_DBG("SimpleLink network interface initialized");
 }
 
 static const struct net_wifi_mgmt_offload simplelink_api = {
@@ -210,25 +220,11 @@ static const struct net_wifi_mgmt_offload simplelink_api = {
 
 static int simplelink_init(struct device *dev)
 {
-	int ret;
-
 	ARG_UNUSED(dev);
-
-	/* Initialize and configure NWP to defaults: */
-	ret = _simplelink_init(simplelink_wifi_cb);
-	if (ret) {
-		SYS_LOG_ERR("_simplelink_init failed!");
-		return(-EIO);
-	}
-
-	/* Grab our MAC address: */
-	_simplelink_get_mac(simplelink_data.mac);
 
 	/* We use system workqueue to deal with scan retries: */
 	k_delayed_work_init(&simplelink_data.work,
 			    simplelink_scan_work_handler);
-
-	SYS_LOG_DBG("SimpleLink driver Initialized");
 
 	return 0;
 }

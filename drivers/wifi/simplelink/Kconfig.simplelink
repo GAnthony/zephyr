@@ -21,7 +21,7 @@ config WIFI_SIMPLELINK_NAME
 
 config WIFI_SIMPLELINK_MAX_PACKET_SIZE
 	int "Maximum size of a packet, in bytes"
-	# MTU (ipv4) per: http://www.ti.com/lit/ug/swru455d/swru455d.pdf:
+	# MTU (ipv4) per: http://www.ti.com/lit/swru455:
 	default 1472
 	help
 	 Set the maximum size of a network packet going through the chip.

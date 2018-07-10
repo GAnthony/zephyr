@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2018, Texas Instruments Incorporated
+ * Copyright (c) 2018 Linaro Limited
  *
  * SPDX-License-Identifier: Apache-2.0
  *
@@ -19,7 +19,7 @@ extern "C" {
 
 /* Define ID for simplelink_wifi_cb to not conflict with WLAN event IDs: */
 #define SIMPLELINK_WIFI_CB_IPACQUIRED \
-		(SL_WLAN_EVENT_MAX + SL_DEVICE_EVENT_DROPPED_NETAPP_IPACQUIRED)
+	(SL_WLAN_EVENT_MAX + SL_DEVICE_EVENT_DROPPED_NETAPP_IPACQUIRED)
 
 struct sl_connect_state {
 	u32_t gateway_ip;
@@ -46,9 +46,5 @@ extern int _simplelink_disconnect(void);
 #ifdef __cplusplus
 }
 #endif
-
-/**
- * @}
- */
 
 #endif /* __SIMPLELINK_SUPPORT_H__ */
